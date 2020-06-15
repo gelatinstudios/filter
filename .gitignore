@@ -2,3 +2,5 @@
 *.h
 *.png
 *.exe
+.vs*
+*.pdb

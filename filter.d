@@ -88,7 +88,7 @@ void filter(image im, cmd_options cmd) {
     
     switch (cmd.method) {
         case method_type.median: im.median_filter(cmd.radius); break;
-        case method_type.gauss:  im.gaussian_blur(3.0f); break;
+        case method_type.gauss:  im.gaussian_blur(cmd.stddev); break;
         
         default: {
             writeln("unknown filter method", cmd.method);
@@ -103,8 +103,6 @@ int main(string[] args) {
     import core.stdc.stdlib : EXIT_SUCCESS, EXIT_FAILURE, exit;
     import std.path : extension;
     import jt_cmd;
-    
-    writeln(v4(1, 2, 3, 4));
     
     bool check_extension(string filename) {
         string ext = filename.extension;
