@@ -1,150 +1,12 @@
 
-T square(T)(T x) {
-    return x*x;
-}
+import std.stdio;
 
-T clamp_lower(T)(T x, T min) {
-    if (x < min) return  min;
-    return x;
-}
-
-T clamp_upper(T)(T x, T max) {
-    if (x > max) return  max;
-    return x;
-}
-
-T clamp(T)(T min, T x, T max) {
-    return clamp_upper(clamp_lower(x, min), max);
-}
-
-T clamp(T)(T min, T *x, T max) {
-    return *x = clamp_upper(clamp_lower(*x, min), max);
-}
-
-float gauss(float x, float y, float stdev) {
-    import std.math : exp, PI;
-    float result = 1.0f / (2*PI*square(stdev));
-    result *= exp(-(square(x) + square(y)) / (2*square(stdev)));
-    return result;
-}
-
-struct v4 {
-    union {
-        struct { float x, y, z, w; };
-        struct { float r, g, b, a; };
-    }
-    
-    v4 opBinary(string op)(v4 l) if (op == "+" || op == "-") {
-        mixin("return v4(x" ~ op ~ "l.x, y" ~ op ~ "l.y, z" ~ op ~ "l.z, w" ~ op ~ "l.w);");
-    }
-    
-    v4 opBinary(string op)(float f) if (op == "*") {
-        return v4(f*x, f*y, f*z, f*w);
-    }
-    
-    v4 opBinaryRight(string op)(float f) if (op == "*") {
-        return opBinary!op(f);
-    }
-    
-    v4 opOpAssign(string op,T)(T l) {
-        return this = this.opBinary!op(l);
-    }
-}
-
-v4 lerp(v4 a, float t, v4 b) {
-    return (1.0f - t)*a + t*b;
-}
-
-uint v4_to_rgba(v4 v) {
-    import std.math : lrint;
-    
-    uint result = 0;
-    result |= (lrint(v.r));
-    result |= (lrint(v.g) << 8);
-    result |= (lrint(v.b) << 16);
-    result |= (lrint(v.a) << 24);
-    return result;
-}
-
-v4 rgba_to_v4(uint u) {
-    v4 result;
-    result.r = cast(ubyte) (u);
-    result.g = cast(ubyte) (u >> 8);
-    result.b = cast(ubyte) (u >> 16);
-    result.a = cast(ubyte) (u >> 24);
-    return result;
-}
-
-ubyte rgba_get_alpha(uint p) {
-    return cast(ubyte) (p >> 24);
-}
-
-float get_value(v4 v) {
-    import std.algorithm : max;
-    return max(v.r, v.g, v.b);
-}
-
-
-float get_value(uint p) {
-    __gshared float[1<<24] rgb_value_memo;
-    
-    float *ptr = &rgb_value_memo[p & 0x00ffffff];
-    if (*ptr) return *ptr;
-    
-    float result = get_value(rgba_to_v4(p));
-    *ptr = result;
-    return result;
-}
-
-uint rgba_2_average(uint a, uint b) {
-    return lerp(a.rgba_to_v4, 0.5f, b.rgba_to_v4).v4_to_rgba;
-}
-
-struct image {
-    int width;
-    int height;
-    uint *pixels;
-}
-
-uint get_pixel(image im, int x, int y) {
-    assert(x >= 0 && x < im.width && y >= 0 && y < im.height);
-    return *(im.pixels + im.width*y + x);
-}
-
-extern (C) ubyte *stbi_load(const char *filename, int *w, int *h, int *channels_in_file, int desired_channels);
-
-image load_image(string filename) {
-    import std.string : toStringz;
-    
-    image result;
-    result.pixels = cast(uint *) stbi_load(filename.toStringz, &result.width, &result.height, null, 4);
-    return result;
-}
-
-extern (C) int stbi_write_png(const char *filename, int w, int h, int comp, const void *data, int stride_in_bytes);
-extern (C) int stbi_write_bmp(const char *filename, int w, int h, int comp, const void *data);
-extern (C) int stbi_write_tga(const char *filename, int w, int h, int comp, const void *data);
-extern (C) int stbi_write_jpg(const char *filename, int w, int h, int comp, const void *data, int quality);
-
-void write_out_image(image im, string filename, int jpg_quality) {
-    import std.string : toStringz;
-    import std.path : extension;
-    import std.stdio : writeln;
-    
-    const auto ext = filename.extension;
-    switch (ext) {
-        case ".png": stbi_write_png(filename.toStringz, im.width, im.height, 4, im.pixels, 0);           break;
-        case ".bmp": stbi_write_bmp(filename.toStringz, im.width, im.height, 4, im.pixels);              break;
-        case ".jpg": stbi_write_jpg(filename.toStringz, im.width, im.height, 4, im.pixels, jpg_quality); break;
-        case ".tga": stbi_write_tga(filename.toStringz, im.width, im.height, 4, im.pixels);              break;
-        
-        default: assert(0);
-    }
-}
+import math;
+import vector_math;
+import image;
 
 void median_filter(image im, int radius) {
     import std.algorithm : sort;
-    import std.stdio : writeln;
     
     writeln("using median filter with radius of ", radius);
     
@@ -180,12 +42,12 @@ void median_filter(image im, int radius) {
     }
 }
 
-void gaussian_blur(image im, int stddev) {
-    import std.stdio : writeln;
+void gaussian_blur(image im, float stddev) {
+    import std.math : ceil;
     
     writeln("using gaussian blur with a stddev of ", stddev);
     
-    int radius = 6*stddev/2 - 1; // ??????
+    int radius = (cast(int)ceil(6*stddev))/2 - 1; // ??????
     
     uint *dest = im.pixels;
     foreach (y; 0 .. im.height) {
@@ -208,35 +70,43 @@ void gaussian_blur(image im, int stddev) {
     }
 }
 
+enum method_type {
+    median,
+    gauss,
+}
+
 struct cmd_options {
     int png_comp_level = 8;
     int radius  = 1;
     int jpg_quality = 100;
-    int stddev = 3;
-    string method = "median";
+    float stddev = 3;
+    method_type method;
 }
 
 void filter(image im, cmd_options cmd) {
-    import std.stdio : writeln;
+    import core.stdc.stdlib : EXIT_FAILURE, exit;
     
     switch (cmd.method) {
-        case "median": im.median_filter(cmd.radius); break;
-        case "gauss":  im.gaussian_blur(cmd.stddev); break;
+        case method_type.median: im.median_filter(cmd.radius); break;
+        case method_type.gauss:  im.gaussian_blur(3.0f); break;
         
-        default: writeln("unknown filter method", cmd.method); assert(0); // TODO: change to exit
+        default: {
+            writeln("unknown filter method", cmd.method);
+            exit(EXIT_FAILURE);
+        }
     }
 }
 
 extern extern (C) int stbi_write_png_compression_level;
 
 int main(string[] args) {
-    import core.stdc.stdlib;
-    import std.stdio;
+    import core.stdc.stdlib : EXIT_SUCCESS, EXIT_FAILURE, exit;
     import std.path : extension;
     import jt_cmd;
     
+    writeln(v4(1, 2, 3, 4));
+    
     bool check_extension(string filename) {
-        import std.path : extension;
         string ext = filename.extension;
         return (ext == ".png" ||
                 ext == ".bmp" ||
