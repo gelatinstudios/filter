@@ -3,10 +3,6 @@ T square(T)(T x) {
     return x*x;
 }
 
-int ceil_to_int(float x) {
-    return cast(int)x + 1;
-}
-
 T clamp_lower(T)(T x, T min) {
     if (x < min) return  min;
     return x;
@@ -262,7 +258,7 @@ int main(string[] args) {
     }
     
     if (filenames.length != 2) {
-        writeln("usage: ", args[0], " [input filename] [output filename] -radius [n]");
+        writeln("usage: ", args[0], " [input filename] [output filename] -[option [arg]...]");
         return EXIT_FAILURE;
     }
     
