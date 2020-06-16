@@ -1,4 +1,5 @@
 
+    import core.stdc.stdlib : EXIT_SUCCESS, EXIT_FAILURE, exit;
 import std.stdio;
 
 import math;
@@ -6,35 +7,46 @@ import vector_math;
 import image;
 
 void median_filter(image im, int radius) {
-    import std.algorithm : sort;
+    void insertion_sort(uint[] window, size_t length) {
+        auto i = 1;
+        while (i < length) {
+            auto tmp = window[i];
+            auto tmp_value = tmp.get_value;
+            auto j = i - 1;
+            while (j >= 0 && window[j].get_value > tmp_value) {
+                window[j+1] = window[j];
+                --j;
+            }
+            window[j+1] = tmp;
+            ++i;
+        }
+    }
     
     writeln("using median filter with radius of ", radius);
     
     uint[] window;
-    window.reserve(square(radius*2 + 1));
+    window.length = square(radius*2 + 1);
     
     uint *dest = im.pixels;
     foreach (y; 0 .. im.height) {
         foreach (x; 0 .. im.width) {
-            window.length = 0;
-            window.assumeSafeAppend;
+            int used = 0;
             
             const wx_end = clamp(0, x+radius+1, im.width-1);
             const wy_end = clamp(0, y+radius+1, im.height-1);
             
             foreach (wy; clamp(0, y-radius, im.height-1) .. wy_end) {
                 foreach (wx; clamp(0, x-radius, im.width-1) .. wx_end) {
-                    window ~= im.get_pixel(wx, wy);
+                    window[used++] = im.get_pixel(wx, wy);
                 }
             }
             
-            // TODO: implement insertion sort
             uint output;
-            window.sort!((a,b) => a.get_value < b.get_value);
-            if (window.length & 1) {
-                output = window[$/2];
+            insertion_sort(window, used);
+            if (used & 1) {
+                output = window[used/2];
             } else {
-                output = rgba_2_average(window[$/2 - 1], window[$/2]);
+                output = rgba_2_average(window[used/2 - 1], window[used/2]);
             }
             
             *dest++ = output;
@@ -84,8 +96,6 @@ struct cmd_options {
 }
 
 void filter(image im, cmd_options cmd) {
-    import core.stdc.stdlib : EXIT_FAILURE, exit;
-    
     switch (cmd.method) {
         case method_type.median: im.median_filter(cmd.radius); break;
         case method_type.gauss:  im.gaussian_blur(cmd.stddev); break;
@@ -100,7 +110,6 @@ void filter(image im, cmd_options cmd) {
 extern extern (C) int stbi_write_png_compression_level;
 
 int main(string[] args) {
-    import core.stdc.stdlib : EXIT_SUCCESS, EXIT_FAILURE, exit;
     import std.path : extension;
     import jt_cmd;
     
